@@ -23,9 +23,9 @@ spec:
             - { name: PGDATABASE, value: promodb }
             - { name: PGUSER, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGUSER } } }
             - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGPASSWORD } } }
-            - { name: JWT_SECRET, valueFrom: { secretKeyRef: { name: hievents-secrets, key: JWT_SECRET } } }
+            - { name: SUPABASE_URL, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_URL } } }
+            - { name: SUPABASE_ANON_KEY, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_ANON_KEY } } }
             - { name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672" }
-            - { name: AUTH_SERVICE_URL, value: "http://auth-service:4001" }
             - { name: EVENT_SERVICE_URL, value: "http://event-service:4002" }
             - { name: PRODUCT_SERVICE_URL, value: "http://product-service:4003" }
             - { name: ORDER_SERVICE_URL, value: "http://order-service:4004" }

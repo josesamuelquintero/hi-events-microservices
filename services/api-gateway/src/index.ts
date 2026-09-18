@@ -6,7 +6,6 @@ const app = express();
 app.use(cors());
 
 const targets = {
-  auth: process.env.AUTH_SERVICE_URL || "http://auth-service:4001",
   event: process.env.EVENT_SERVICE_URL || "http://event-service:4002",
   product: process.env.PRODUCT_SERVICE_URL || "http://product-service:4003",
   order: process.env.ORDER_SERVICE_URL || "http://order-service:4004",
@@ -33,7 +32,9 @@ function proxy(target: string) {
 app.use(/^\/api\/events\/[^/]+\/products/, proxy(targets.product));
 app.use(/^\/api\/events\/[^/]+\/promo-codes/, proxy(targets.promo));
 
-app.use("/api/auth", proxy(targets.auth));
+// Auth itself no longer goes through this gateway — the login page talks to
+// Supabase Auth directly (supabase-js, using the public anon key) and hands the
+// resulting JWT to these APIs as a Bearer token.
 app.use("/api/events", proxy(targets.event));
 app.use("/api/products", proxy(targets.product));
 app.use("/api/orders", proxy(targets.order));

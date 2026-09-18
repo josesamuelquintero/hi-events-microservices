@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-login
+  namespace: hievents
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web-login }
+  template:
+    metadata:
+      labels: { app: web-login }
+    spec:
+      containers:
+        - name: web-login
+          image: hievents/web-login:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8081 }]
+          env:
+            - { name: PORT, value: "8081" }
+            - { name: SUPABASE_URL, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_URL } } }
+            - { name: SUPABASE_ANON_KEY, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_ANON_KEY } } }
+          readinessProbe:
+            httpGet: { path: /health, port: 8081 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "250m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-login
+  namespace: hievents
+spec:
+  type: NodePort
+  selector: { app: web-login }
+  ports: [{ port: 8081, targetPort: 8081, nodePort: 30081 }]

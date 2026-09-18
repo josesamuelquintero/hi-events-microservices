@@ -6,7 +6,8 @@ x-service-env: &service-env
   PGUSER: hievents
   PGPASSWORD: hievents
   RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-  JWT_SECRET: dev-secret-change-me
+  SUPABASE_URL: https://jxmpnejzcaewmcsconka.supabase.co
+  SUPABASE_ANON_KEY: sb_publishable_a4nl1GR8EC1C7vTNXy7XsQ_Oecq74me
 
 services:
   postgres:
@@ -32,11 +33,13 @@ services:
       interval: 5s
       retries: 10
 
-  auth-service:
-    build: ./services/auth-service
-    environment: { <<: *service-env, PGDATABASE: authdb, PORT: "4001" }
-    depends_on: [postgres, rabbitmq]
-    ports: ["4001:4001"]
+  web-login:
+    build: ./services/web-login
+    environment:
+      PORT: "8081"
+      SUPABASE_URL: https://jxmpnejzcaewmcsconka.supabase.co
+      SUPABASE_ANON_KEY: sb_publishable_a4nl1GR8EC1C7vTNXy7XsQ_Oecq74me
+    ports: ["8081:8081"]
 
   event-service:
     build: ./services/event-service
@@ -89,7 +92,6 @@ services:
   api-gateway:
     build: ./services/api-gateway
     environment:
-      AUTH_SERVICE_URL: http://auth-service:4001
       EVENT_SERVICE_URL: http://event-service:4002
       PRODUCT_SERVICE_URL: http://product-service:4003
       ORDER_SERVICE_URL: http://order-service:4004
@@ -99,7 +101,6 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:4008
       PORT: "8080"
     depends_on:
-      - auth-service
       - event-service
       - product-service
       - order-service

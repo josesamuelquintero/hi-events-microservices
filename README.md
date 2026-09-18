@@ -10,7 +10,7 @@ se comunican por REST (sync) y RabbitMQ (async) según el caso.
 | Servicio               | Puerto | DB          | Rol |
 |-------------------------|--------|-------------|-----|
 | api-gateway             | 8080   | -           | Único punto de entrada público, enruta por prefijo de path |
-| auth-service            | 4001   | authdb      | Registro/login, emite JWT |
+| web-login                | 8081   | -           | Página de login (Google, vía Supabase Auth) |
 | event-service            | 4002   | eventdb     | CRUD de eventos |
 | product-service          | 4003   | productdb   | Tickets/productos, reserva de stock |
 | order-service            | 4004   | orderdb     | Orquesta el checkout (saga) |
@@ -33,13 +33,32 @@ Base de datos por servicio: comparten un único Postgres (para no gastar
 recursos en el cluster local) pero cada servicio solo conoce su propia base —
 aislamiento lógico, no físico. Ver el comentario `ponytail:` en `k8s/02-postgres.yaml`.
 
+**Auth:** no hay un `auth-service` casero — el login (incluyendo "Continuar con
+Google") lo maneja Supabase Auth directamente. `web-login` es una página
+estática que llama a `supabase-js` para hacer el OAuth con Google y te muestra
+el JWT resultante. `event-service`, `product-service` y `promo-service`
+verifican ese JWT contra las llaves públicas de Supabase (JWKS,
+`https://<proyecto>.supabase.co/auth/v1/.well-known/jwks.json`) — no comparten
+ningún secreto con Supabase, solo la URL del proyecto.
+
+## Antes de probar el login: autorizar las Redirect URLs en Supabase
+
+Supabase solo redirige de vuelta a URLs que tú autorizaste — si no lo haces,
+el login con Google falla justo después de que Google te pide el consentimiento.
+
+Ve a [Authentication → URL Configuration](https://supabase.com/dashboard/project/jxmpnejzcaewmcsconka/auth/url-configuration)
+y agrega en **Redirect URLs**:
+- `http://localhost:8081/**` (para probar con Docker Compose)
+- `http://<IP-de-tu-VM>:30081/**` (para probar en Hetzner/k3s)
+
 ## Correr local con Docker Compose
 
 ```bash
 docker compose up --build
-curl -X POST localhost:8080/api/auth/register -H 'Content-Type: application/json' \
-  -d '{"name":"Ana","email":"ana@test.com","password":"secret123"}'
 ```
+
+Abre `http://localhost:8081`, entra con Google, y copia el token que te muestra
+la página — es tu `Bearer` para las llamadas al gateway (`http://localhost:8080/api/...`).
 
 ## Correr en Kubernetes (kind)
 
@@ -87,19 +106,20 @@ kubectl apply -f k8s/
 kubectl -n hievents get pods -w   # ctrl-C cuando todo esté Running
 ```
 
-### Abrir el puerto para llegar desde afuera
+### Abrir los puertos para llegar desde afuera
 
-El gateway queda en el `NodePort` 30080 de la VM. Hay que abrirlo en **dos**
-lados (ambos filtran tráfico):
+El gateway usa el `NodePort` 30080 y la página de login el 30081. Hay que
+abrir **ambos**, en **dos** lados (los dos filtran tráfico):
 
 ```bash
 # firewall del propio Ubuntu (si ufw está activo)
 sudo ufw allow 30080/tcp
+sudo ufw allow 30081/tcp
 ```
 
 y en el **Hetzner Cloud Firewall** (panel web, o `hcloud firewall add-rule`):
-permitir TCP entrante al puerto `30080` desde `0.0.0.0/0` (o solo tu IP, si no
-necesitas que otros lo vean).
+permitir TCP entrante a los puertos `30080` y `30081` desde `0.0.0.0/0` (o
+solo tu IP, si no necesitas que otros lo vean).
 
 Prueba desde tu máquina: `curl http://<IP-pública-de-la-VM>:30080/health`.
 
@@ -109,7 +129,8 @@ Prueba desde tu máquina: `curl http://<IP-pública-de-la-VM>:30080/health`.
 git pull
 ./scripts/build-all.sh
 ./scripts/k3s-import.sh
-kubectl -n hievents rollout restart deployment -l app  # o el nombre del servicio que cambió
+kubectl -n hievents rollout restart deployment/<nombre-del-servicio-que-cambió>
+# o, para reiniciar todos: kubectl -n hievents rollout restart deployment --all
 ```
 
 ## Flujo de demo end-to-end
@@ -117,9 +138,9 @@ kubectl -n hievents rollout restart deployment -l app  # o el nombre del servici
 ```bash
 BASE=http://localhost:8080/api
 
-# 1. Registro y login
-TOKEN=$(curl -s $BASE/auth/register -H 'Content-Type: application/json' \
-  -d '{"name":"Organizer","email":"org@test.com","password":"secret123"}' | jq -r .token)
+# 1. Login: abre http://localhost:8081 (o http://<IP-VM>:30081), entra con
+#    Google, y pega aquí el token que te muestra la página
+TOKEN="<pega el JWT de web-login>"
 
 # 2. Crear evento
 EVENT_ID=$(curl -s $BASE/events -H "Authorization: Bearer $TOKEN" \
@@ -174,3 +195,6 @@ curl -s $BASE/orders -H 'Content-Type: application/json' \
 - Postgres y RabbitMQ son deployments de un solo pod con `emptyDir`/sin
   persistencia: se pierden datos si el pod muere. Correcto para una demo,
   no para producción (usar StatefulSet+PVC o RDS/Amazon MQ).
+- `web-login` solo maneja Google. Email/password, magic links, etc. son
+  soportados por Supabase Auth igual, pero no hay botón para ellos en la
+  página — agregarlo es una llamada más a `supabase-js`, no un servicio nuevo.

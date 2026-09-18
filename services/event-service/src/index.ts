@@ -12,7 +12,7 @@ async function init() {
     pool.query(`
       CREATE TABLE IF NOT EXISTS events (
         id SERIAL PRIMARY KEY,
-        organizer_id INTEGER NOT NULL,
+        organizer_id TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT,
         location TEXT,

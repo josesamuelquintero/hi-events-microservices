@@ -5,7 +5,6 @@ metadata:
   namespace: hievents
 data:
   init-db.sql: |
-    CREATE DATABASE authdb;
     CREATE DATABASE eventdb;
     CREATE DATABASE productdb;
     CREATE DATABASE orderdb;

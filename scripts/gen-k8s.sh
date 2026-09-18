@@ -5,7 +5,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SERVICE_URLS='
-            - { name: AUTH_SERVICE_URL, value: "http://auth-service:4001" }
             - { name: EVENT_SERVICE_URL, value: "http://event-service:4002" }
             - { name: PRODUCT_SERVICE_URL, value: "http://product-service:4003" }
             - { name: ORDER_SERVICE_URL, value: "http://order-service:4004" }
@@ -42,7 +41,8 @@ spec:
             - { name: PGDATABASE, value: $db }
             - { name: PGUSER, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGUSER } } }
             - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGPASSWORD } } }
-            - { name: JWT_SECRET, valueFrom: { secretKeyRef: { name: hievents-secrets, key: JWT_SECRET } } }
+            - { name: SUPABASE_URL, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_URL } } }
+            - { name: SUPABASE_ANON_KEY, valueFrom: { configMapKeyRef: { name: supabase-config, key: SUPABASE_ANON_KEY } } }
             - { name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672" }$SERVICE_URLS
           readinessProbe:
             httpGet: { path: /health, port: $port }
@@ -64,7 +64,6 @@ YAML
   echo "wrote $file"
 }
 
-gen_service k8s/10-auth-service.yaml auth-service 4001 authdb 2
 gen_service k8s/11-event-service.yaml event-service 4002 eventdb 2
 gen_service k8s/12-product-service.yaml product-service 4003 productdb 2
 gen_service k8s/13-order-service.yaml order-service 4004 orderdb 2

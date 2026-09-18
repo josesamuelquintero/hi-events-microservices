@@ -1,0 +1,10 @@
+# Public/publishable values only — safe to commit. The anon/publishable key is
+# designed to be embedded in client-side code; nothing secret lives here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supabase-config
+  namespace: hievents
+data:
+  SUPABASE_URL: "https://jxmpnejzcaewmcsconka.supabase.co"
+  SUPABASE_ANON_KEY: "sb_publishable_a4nl1GR8EC1C7vTNXy7XsQ_Oecq74me"
