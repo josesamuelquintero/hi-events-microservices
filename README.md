@@ -44,7 +44,7 @@ curl -X POST localhost:8080/api/auth/register -H 'Content-Type: application/json
 ## Correr en Kubernetes (kind)
 
 ```bash
-kind create cluster --name hievents --config k8s/kind-cluster.yaml
+kind create cluster --name hievents --config kind/kind-cluster.yaml
 ./scripts/build-all.sh
 ./scripts/kind-load.sh hievents
 
@@ -55,7 +55,62 @@ kubectl apply -f k8s/
 kubectl -n hievents get pods -w   # ctrl-C cuando todo esté Running
 ```
 
-El gateway queda expuesto en `localhost:8080` (mapeado por `k8s/kind-cluster.yaml`).
+El gateway queda expuesto en `localhost:8080` (mapeado por `kind/kind-cluster.yaml`).
+
+## Desplegar en tu propia VM (Hetzner, k3s)
+
+Con una VM Ubuntu que ya tiene Docker, esto es lo más simple: k3s es Kubernetes
+real (un solo binario) y construyes las imágenes en la misma VM, sin necesidad
+de cuenta en ningún registry.
+
+```bash
+# 1. Instalar k3s (Kubernetes de un solo nodo)
+curl -sfL https://get.k3s.io | sh -
+sudo k3s kubectl get node   # debería salir "Ready"
+
+# Atajo para no escribir 'sudo k3s kubectl' cada vez:
+alias kubectl='sudo k3s kubectl'
+
+# 2. Clonar el repo y construir las imágenes con el Docker que ya tienes
+git clone https://github.com/josesamuelquintero/hi-events-microservices.git
+cd hi-events-microservices
+./scripts/build-all.sh
+
+# 3. Importar las imágenes al containerd de k3s (no comparte el Docker daemon de la VM)
+./scripts/k3s-import.sh
+
+# 4. Aplicar los manifiestos (los mismos que en kind, sin el archivo kind-cluster.yaml)
+kubectl apply -f k8s/00-namespace.yaml -f k8s/01-secrets.yaml
+kubectl apply -f k8s/02-postgres.yaml -f k8s/03-rabbitmq.yaml
+kubectl -n hievents wait --for=condition=available deploy/postgres deploy/rabbitmq --timeout=120s
+kubectl apply -f k8s/
+kubectl -n hievents get pods -w   # ctrl-C cuando todo esté Running
+```
+
+### Abrir el puerto para llegar desde afuera
+
+El gateway queda en el `NodePort` 30080 de la VM. Hay que abrirlo en **dos**
+lados (ambos filtran tráfico):
+
+```bash
+# firewall del propio Ubuntu (si ufw está activo)
+sudo ufw allow 30080/tcp
+```
+
+y en el **Hetzner Cloud Firewall** (panel web, o `hcloud firewall add-rule`):
+permitir TCP entrante al puerto `30080` desde `0.0.0.0/0` (o solo tu IP, si no
+necesitas que otros lo vean).
+
+Prueba desde tu máquina: `curl http://<IP-pública-de-la-VM>:30080/health`.
+
+### Actualizar tras un cambio de código
+
+```bash
+git pull
+./scripts/build-all.sh
+./scripts/k3s-import.sh
+kubectl -n hievents rollout restart deployment -l app  # o el nombre del servicio que cambió
+```
 
 ## Flujo de demo end-to-end
 
