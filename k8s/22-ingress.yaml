@@ -1,0 +1,27 @@
+# Routes plain port-80 traffic through Traefik (bundled with k3s, already bound
+# to the VM's public IP) so nobody has to remember a NodePort. The api-gateway
+# already expects paths prefixed with /api itself, so no path rewriting here.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hievents-ingress
+  namespace: hievents
+spec:
+  ingressClassName: traefik
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-login
+                port:
+                  number: 8081
