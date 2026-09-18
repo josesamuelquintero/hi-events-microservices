@@ -36,7 +36,7 @@ app.get("/", (_req, res) => {
     document.getElementById("google-btn").onclick = async () => {
       await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: window.location.origin + "/" },
       });
     };
 
