@@ -20,7 +20,11 @@ function proxy(target: string) {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
-    pathRewrite: (path) => path.replace(/^\/api/, ""),
+    // Express strips the matched mount prefix from req.url before handing off to
+    // this middleware, so `path` here is already relative to the mount point and
+    // missing the service-specific segment (e.g. "/auth"). req.originalUrl still
+    // has the full incoming path, so rewrite from that instead.
+    pathRewrite: (_path, req) => (req as express.Request).originalUrl.replace(/^\/api/, ""),
   });
 }
 
