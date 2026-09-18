@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>hi-events</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 2rem 1rem 4rem; color: #1a1a1a; }
+  .hero { text-align: center; margin-top: 4rem; }
+  .hero p { color: #555; }
+  button { font-size: 0.95rem; padding: 0.5rem 1rem; cursor: pointer; border: 1px solid #ccc; border-radius: 6px; background: white; }
+  button:hover { background: #f0f0f0; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #eee; }
+  .card { border: 1px solid #e2e2e2; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .card ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+  form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  form input { padding: 0.4rem; border: 1px solid #ccc; border-radius: 4px; flex: 1; min-width: 120px; }
+  .product-form { margin-top: 0.75rem; margin-bottom: 0; }
+  h2 { margin-top: 2rem; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+    const supabase = createClient("__SUPABASE_URL__", "__SUPABASE_ANON_KEY__");
+    const appEl = document.getElementById("app");
+
+    function landingHTML() {
+      return [
+        '<div class="hero">',
+        '<h1>hi-events</h1>',
+        '<p>Crea eventos y vende tickets. Demo de microservicios para sistemas distribuidos.</p>',
+        '<button id="google-btn">Continuar con Google</button>',
+        '</div>',
+      ].join("");
+    }
+
+    function productRow(p) {
+      return '<li>' + p.title + ': $' + (p.price_cents / 100).toFixed(2) +
+        ' (' + p.quantity_sold + '/' + p.quantity_available + ' vendidos)</li>';
+    }
+
+    function eventCard(e, editable) {
+      const products = e.products || [];
+      const productList = products.length
+        ? '<ul>' + products.map(productRow).join("") + '</ul>'
+        : '<p>Sin tickets todavía.</p>';
+      const form = editable
+        ? [
+            '<form class="product-form" data-event-id="' + e.id + '">',
+            '<input name="title" placeholder="Nombre del ticket" required>',
+            '<input name="price_cents" type="number" min="0" placeholder="Precio (centavos)" required>',
+            '<input name="quantity_available" type="number" min="1" placeholder="Cantidad" required>',
+            '<button type="submit">Agregar ticket</button>',
+            '</form>',
+          ].join("")
+        : "";
+      return [
+        '<div class="card">',
+        '<strong>' + e.title + '</strong> — ' + new Date(e.start_date).toLocaleString(),
+        productList,
+        form,
+        '</div>',
+      ].join("");
+    }
+
+    function dashboardHTML(session, events) {
+      const mine = events.filter((e) => e.organizer_id === session.user.id);
+      const others = events.filter((e) => e.organizer_id !== session.user.id);
+      return [
+        '<div class="topbar">',
+        '<span>' + session.user.email + '</span>',
+        '<button id="logout-btn">Salir</button>',
+        '</div>',
+
+        '<h2>Crear evento</h2>',
+        '<form id="event-form">',
+        '<input name="title" placeholder="Título" required>',
+        '<input name="start_date" type="datetime-local" required>',
+        '<input name="location" placeholder="Lugar (opcional)">',
+        '<button type="submit">Crear</button>',
+        '</form>',
+
+        '<h2>Mis eventos</h2>',
+        mine.length ? mine.map((e) => eventCard(e, true)).join("") : '<p>Todavía no tienes eventos.</p>',
+
+        '<h2>Otros eventos</h2>',
+        others.length ? others.map((e) => eventCard(e, false)).join("") : '<p>No hay más eventos.</p>',
+      ].join("");
+    }
+
+    async function loadEvents(session) {
+      const res = await fetch("/api/events");
+      const events = await res.json();
+      const mineIds = events.filter((e) => e.organizer_id === session.user.id).map((e) => e.id);
+      await Promise.all(
+        mineIds.map(async (id) => {
+          const ev = events.find((e) => e.id === id);
+          const r = await fetch("/api/events/" + id + "/products");
+          ev.products = await r.json();
+        })
+      );
+      return events;
+    }
+
+    function wireLanding() {
+      document.getElementById("google-btn").onclick = () =>
+        supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: window.location.origin + "/" },
+        });
+    }
+
+    function wireDashboard(session) {
+      document.getElementById("logout-btn").onclick = async () => {
+        await supabase.auth.signOut();
+        render();
+      };
+
+      document.getElementById("event-form").onsubmit = async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(ev.target);
+        await fetch("/api/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+          body: JSON.stringify({
+            title: fd.get("title"),
+            start_date: new Date(fd.get("start_date")).toISOString(),
+            location: fd.get("location") || undefined,
+          }),
+        });
+        render();
+      };
+
+      document.querySelectorAll(".product-form").forEach((form) => {
+        form.onsubmit = async (ev) => {
+          ev.preventDefault();
+          const eventId = form.getAttribute("data-event-id");
+          const fd = new FormData(form);
+          await fetch("/api/events/" + eventId + "/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token },
+            body: JSON.stringify({
+              title: fd.get("title"),
+              price_cents: Number(fd.get("price_cents")),
+              quantity_available: Number(fd.get("quantity_available")),
+            }),
+          });
+          render();
+        };
+      });
+    }
+
+    async function render() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        appEl.innerHTML = landingHTML();
+        wireLanding();
+        return;
+      }
+      const events = await loadEvents(session);
+      appEl.innerHTML = dashboardHTML(session, events);
+      wireDashboard(session);
+    }
+
+    supabase.auth.onAuthStateChange(() => render());
+    render();
+  </script>
+</body>
+</html>
