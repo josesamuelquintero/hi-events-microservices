@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promo-service
+  namespace: hievents
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: promo-service }
+  template:
+    metadata:
+      labels: { app: promo-service }
+    spec:
+      containers:
+        - name: promo-service
+          image: hievents/promo-service:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 4007 }]
+          env:
+            - { name: PORT, value: "4007" }
+            - { name: PGHOST, value: postgres }
+            - { name: PGPORT, value: "5432" }
+            - { name: PGDATABASE, value: promodb }
+            - { name: PGUSER, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGUSER } } }
+            - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: hievents-secrets, key: PGPASSWORD } } }
+            - { name: JWT_SECRET, valueFrom: { secretKeyRef: { name: hievents-secrets, key: JWT_SECRET } } }
+            - { name: RABBITMQ_URL, value: "amqp://guest:guest@rabbitmq:5672" }
+            - { name: AUTH_SERVICE_URL, value: "http://auth-service:4001" }
+            - { name: EVENT_SERVICE_URL, value: "http://event-service:4002" }
+            - { name: PRODUCT_SERVICE_URL, value: "http://product-service:4003" }
+            - { name: ORDER_SERVICE_URL, value: "http://order-service:4004" }
+            - { name: PAYMENT_SERVICE_URL, value: "http://payment-service:4005" }
+            - { name: ATTENDEE_SERVICE_URL, value: "http://attendee-service:4006" }
+            - { name: PROMO_SERVICE_URL, value: "http://promo-service:4007" }
+            - { name: NOTIFICATION_SERVICE_URL, value: "http://notification-service:4008" }
+          readinessProbe:
+            httpGet: { path: /health, port: 4007 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "250m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: promo-service
+  namespace: hievents
+spec:
+  selector: { app: promo-service }
+  ports: [{ port: 4007, targetPort: 4007 }]

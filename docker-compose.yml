@@ -1,0 +1,113 @@
+version: "3.8"
+
+x-service-env: &service-env
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGUSER: hievents
+  PGPASSWORD: hievents
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+  JWT_SECRET: dev-secret-change-me
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hievents
+      POSTGRES_PASSWORD: hievents
+      POSTGRES_DB: postgres
+    ports: ["5432:5432"]
+    volumes:
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hievents"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      retries: 10
+
+  auth-service:
+    build: ./services/auth-service
+    environment: { <<: *service-env, PGDATABASE: authdb, PORT: "4001" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4001:4001"]
+
+  event-service:
+    build: ./services/event-service
+    environment: { <<: *service-env, PGDATABASE: eventdb, PORT: "4002" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4002:4002"]
+
+  product-service:
+    build: ./services/product-service
+    environment: { <<: *service-env, PGDATABASE: productdb, PORT: "4003" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4003:4003"]
+
+  order-service:
+    build: ./services/order-service
+    environment:
+      <<: *service-env
+      PGDATABASE: orderdb
+      PORT: "4004"
+      PRODUCT_SERVICE_URL: http://product-service:4003
+      PAYMENT_SERVICE_URL: http://payment-service:4005
+      PROMO_SERVICE_URL: http://promo-service:4007
+    depends_on: [postgres, rabbitmq, product-service, payment-service, promo-service]
+    ports: ["4004:4004"]
+
+  payment-service:
+    build: ./services/payment-service
+    environment: { <<: *service-env, PGDATABASE: paymentdb, PORT: "4005" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4005:4005"]
+
+  attendee-service:
+    build: ./services/attendee-service
+    environment: { <<: *service-env, PGDATABASE: attendeedb, PORT: "4006" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4006:4006"]
+
+  promo-service:
+    build: ./services/promo-service
+    environment: { <<: *service-env, PGDATABASE: promodb, PORT: "4007" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4007:4007"]
+
+  notification-service:
+    build: ./services/notification-service
+    environment: { <<: *service-env, PGDATABASE: notifdb, PORT: "4008" }
+    depends_on: [postgres, rabbitmq]
+    ports: ["4008:4008"]
+
+  api-gateway:
+    build: ./services/api-gateway
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:4001
+      EVENT_SERVICE_URL: http://event-service:4002
+      PRODUCT_SERVICE_URL: http://product-service:4003
+      ORDER_SERVICE_URL: http://order-service:4004
+      PAYMENT_SERVICE_URL: http://payment-service:4005
+      ATTENDEE_SERVICE_URL: http://attendee-service:4006
+      PROMO_SERVICE_URL: http://promo-service:4007
+      NOTIFICATION_SERVICE_URL: http://notification-service:4008
+      PORT: "8080"
+    depends_on:
+      - auth-service
+      - event-service
+      - product-service
+      - order-service
+      - payment-service
+      - attendee-service
+      - promo-service
+      - notification-service
+    ports: ["8080:8080"]
+
+volumes:
+  pgdata:
