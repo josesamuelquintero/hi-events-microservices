@@ -5,6 +5,10 @@ Descomposición en microservicios inspirada en el dominio de [hi.events](https:/
 distribuidos: cada servicio es independiente, con su propia base de datos, y
 se comunican por REST (sync) y RabbitMQ (async) según el caso.
 
+Para el análisis conceptual (patrones de sistemas distribuidos usados y por
+qué) ver [ARQUITECTURA.md](ARQUITECTURA.md). Este README es la guía práctica
+de instalación y uso.
+
 ## Servicios
 
 | Servicio               | Puerto | DB          | Rol |
